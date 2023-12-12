@@ -3,20 +3,23 @@ import { StyleSheet } from "react-native";
 import { Button, Text } from "react-native-elements";
 import { Callout } from "react-native-maps";
 import { FontAwesome } from "@expo/vector-icons";
+import { useAuth } from "../store/AuthContext";
 
-const GalleryDetails = ({ gallery, handleSetAsVisited }) => {
+const GalleryDetails = ({ gallery, handleSetAsVisited, id, visited }) => {
+  const { user } = useAuth();
+
   return (
     <Callout
       style={{
         width: 250,
-        height: 200,
+        height: user === 1 ? 130 : 200,
         display: "flex",
         justifyContent: "space-between",
       }}
       onPress={(e) => {
         console.log(e);
         if (e.nativeEvent.point?.y > 150) {
-          handleSetAsVisited(gallery.id);
+          handleSetAsVisited(id);
         }
       }}
     >
@@ -29,29 +32,30 @@ const GalleryDetails = ({ gallery, handleSetAsVisited }) => {
           </Text>
         ))}
       </View>
-      {gallery.visited ? (
-        <View
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <FontAwesome
-            name="check"
-            size={30}
-            color="green"
-            style={styles.icon}
-          />
-          <Text>Galeria już została odwiedzona :)</Text>
-        </View>
-      ) : (
-        <Button
-          title="Oznacz jako odwiedzone"
-          //   onPress={() => handleSetAsVisited(gallery.id)}
-        ></Button>
-      )}
+      {user !== 1 ? (
+        visited ? (
+          <View
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <FontAwesome
+              name="check"
+              size={30}
+              color="green"
+              style={styles.icon}
+            />
+            <Text>Galeria już została odwiedzona :)</Text>
+          </View>
+        ) : (
+          <Button
+            title="Oznacz jako odwiedzone"
+          ></Button>
+        )
+      ) : null}
     </Callout>
   );
 };
