@@ -1,55 +1,193 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Button } from "react-native";
-import GoogleSignInButton from "../components/GoogleSignInButton";
+import TwitterSignInButton from "../components/TwitterSignInButton";
 import { StyleSheet } from "react-native";
 import { TouchableOpacity } from "react-native";
 import { useAuth } from "../store/AuthContext";
+import { InAppBrowser } from "react-native-inappbrowser-reborn";
+import { Platform } from "react-native";
+import * as WebBrowser from "expo-web-browser";
+import {
+  makeRedirectUri,
+  useAuthRequest,
+  CodeChallengeMethod,
+  AccessTokenRequest,
+} from "expo-auth-session";
+import CryptoJS from "react-native-crypto-js";
+import {
+  checkIfTwitterUserExist,
+  createTwitterUser,
+} from "../utils/UserService";
 
-// w CMD komenda ipconfig i tam IPv4 Address
-const API = "http://192.168.1.6:1337/api";
-// const API = "http://localhost:1337/api";
+const API = "http://192.168.0.137:1337/api";
+
+function base64URLEncode(str) {
+  return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+function generateRandomString(length = 64) {
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+}
+
+const codeVerifier = generateRandomString();
+
+WebBrowser.maybeCompleteAuthSession();
 const LoginScreen = ({ navigation }) => {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [codeChallenge, setCodeChallenge] = useState("");
 
   const { user, setUserContext } = useAuth();
 
-  useEffect(() => {
-    if (user) {
-      // User is authenticated, navigate to Home screen
-      navigation.navigate("Home");
-    }
-  }, [user]);
+  const discovery = {
+    authorizationEndpoint: "https://twitter.com/i/oauth2/authorize",
+  };
 
-  useEffect(() => {
-    setError(null);
-  }, []);
+  const tokenEndpoint = "https://api.twitter.com/oauth2/token";
+  const tokenEndpoint2 = "https://api.twitter.com/2/oauth2/token";
 
-  const handleEmailChange = (text) => {
-    setEmail(text);
+  const useProxy = Platform.select({ web: false, default: true });
+  const redirectUri = makeRedirectUri({ useProxy });
+  const [request, response, promptAsync] = useAuthRequest(
+    {
+      clientId: "V1E0a05GVGMwR1QybG11WlRESUc6MTpjaQ",
+      clientSecret: "PR3jfv6x2j_RCMXzPDPxlvP6hJ3ubr476uczCxxbO_amyhWYHv",
+      redirectUri: "exp://",
+      usePKCE: true,
+      scopes: ["tweet.read", "users.read"],
+      codeChallangeMethod: CodeChallengeMethod.S256,
+      codeChallange: codeChallenge,
+    },
+    discovery
+  );
+
+  console.log(`Redirect URL: ${redirectUri}`);
+
+  const handleUsernameChange = (text) => {
+    setUsername(text);
   };
 
   const handlePasswordChange = (text) => {
     setPassword(text);
   };
+  useEffect(() => {
+    if (user) {
+      navigation.navigate("Home");
+    }
+  }, [user]);
+
+  useEffect(() => {
+    async function generateCodeChallenge() {
+      try {
+        const hashedCodeVerifier = CryptoJS.SHA256(codeVerifier).toString(
+          CryptoJS.enc.Base64
+        );
+        const base64UrlEncoded = base64URLEncode(hashedCodeVerifier);
+        console.log(base64UrlEncoded);
+        setCodeChallenge(base64UrlEncoded);
+      } catch (error) {
+        console.log(error);
+      }
+
+    }
+    generateCodeChallenge();
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    console.log("REQUEST", request, "RESPONSE", response);
+    if (response?.type === "success") {
+      const { code } = response.params;
+
+      fetch(
+        tokenEndpoint2 +
+          `?grant_type=authorization_code&client_id=V1E0a05GVGMwR1QybG11WlRESUc6MTpjaQ&redirect_uri=exp://&code_verifier=${request.codeVerifier}&code=${code}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        }
+      )
+        .then((response) => {
+          if (!response) {
+            throw new Error("Coś poszło nie tak");
+          }
+          return response.json();
+        })
+        .then((data) => {
+
+          const bearerToken = data?.access_token;
+
+          fetch("https://api.twitter.com/2/users/me", {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${bearerToken}`,
+            },
+          })
+            .then((res) => res.json())
+            .then((result) => {
+              if (result?.data?.username) {
+                const usernameTwitter = result.data.username;
+                checkIfTwitterUserExist(usernameTwitter)
+                  .then((resp) => resp.json())
+                  .then((result) => {
+                    if (result.data.length === 0) {
+                      console.log("RESULT: ", JSON.stringify(result));
+                      createTwitterUser({
+                        username: usernameTwitter,
+                      })
+                        .then((res) => {
+                          console.log("RES: ", JSON.stringify(res));
+                          return res.json();
+                        })
+                        .then((result) => {
+                          if (result?.data?.attributes.username) {
+                            setUserContext({
+                              username: result?.data?.attributes.username,
+                            });
+                          }
+                        });
+                    } else {
+                      console.log("ELSE", JSON.stringify(result));
+                      setUserContext({ username: usernameTwitter });
+                    }
+                  });
+              }
+            });
+        })
+        .catch((error) => {
+          // Handle errors
+          console.error("Error fetching bearer token:", error);
+        });
+    }
+  }, [response]);
 
   const handleCredentialsLogin = async () => {
-    // Implement your credentials login logic here
-    console.log(`Logging in with email: ${email} and password: ${password}`);
     setIsLoading(true);
     try {
+      if (!username) {
+        setError("Nie podano nazwę użytkownika! Pole jest wymagane.");
+        return ;
+      }
+      if (!password) {
+        setError("Nie podano hasła! Proszę podać hasło.");
+        return ;
+      }
+
       const value = {
-        identifier: email,
+        identifier: username,
         password: password,
       };
 
-      // const value = {
-      //   identifier: "mm@gmail.com",
-      //   password: "mmmmmm",
-      // };
-      // debugger;
       const response = await fetch(`${API}/auth/local`, {
         method: "POST",
         headers: {
@@ -62,75 +200,43 @@ const LoginScreen = ({ navigation }) => {
       if (data?.error) {
         throw data?.error;
       } else {
-        // set the token
-        // setToken(data.jwt);
-
-        // set the user
-        setUserContext(data);
-
-        // message.success(`Welcome back ${data.user.username}!`);
-        // navigation.navigate("Home");
-        // navigate("/profile", { replace: true });
+        setUserContext({ username });
       }
     } catch (error) {
       console.error(error);
-      setError(error?.message ?? "Something went wrong!");
+      if (error?.message == "Invalid identifier or password") {
+        setError("Niepoprawny adres email lub hasło! Proszę podać poprawne dane.");
+        return ;
+      }
+      else setError(error?.message ?? "Coś poszło nie tak!");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
-    // try {
-    //   await GoogleSignin.hasPlayServices();
-    //   const userInfo = await GoogleSignin.signIn();
-    //   console.log(userInfo);
-    //   // Implement your Google login logic here using userInfo
-    // } catch (error) {
-    //   if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-    //     // user cancelled the login flow
-    //     console.log('Google login cancelled');
-    //   } else if (error.code === statusCodes.IN_PROGRESS) {
-    //     // operation (e.g. sign in) is in progress already
-    //     console.log('Google login in progress');
-    //   } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-    //     // play services not available or outdated
-    //     console.log('Google Play services not available');
-    //   } else {
-    //     // some other error happened
-    //     console.error(error);
-    //   }
-    // }
-  };
-
   if (user) {
-    return null; // Render nothing in this case
+    return null;
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
-      <Text>{email}</Text>
-
-      {/* Email input */}
+      <Text style={styles.title}>Zaloguj się</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
-        keyboardType="email-address"
+        placeholder="Nazwa użytkownika"
+        keyboardType="default"
         autoCapitalize="none"
-        onChangeText={handleEmailChange}
+        onChangeText={handleUsernameChange}
       />
 
-      {/* Password input */}
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder="Hasło"
         secureTextEntry
         autoCapitalize="none"
         onChangeText={handlePasswordChange}
       />
 
-      {/* Login button */}
       <TouchableOpacity
         style={styles.loginButton}
         onPress={handleCredentialsLogin}
@@ -138,35 +244,30 @@ const LoginScreen = ({ navigation }) => {
         {isLoading ? (
           <Text>...</Text>
         ) : (
-          <Text style={styles.loginButtonText}>Login</Text>
+          <Text style={styles.loginButtonText}>Zaloguj się</Text>
         )}
       </TouchableOpacity>
 
       {error && <Text style={styles.errorText}>{error.toString()}</Text>}
 
-      {/* Google Sign-In button */}
-      <GoogleSignInButton
-        onPress={() => console.log("Google Sign-In button pressed")}
+      <TwitterSignInButton
+        onPress={() => {
+          promptAsync();
+        }}
       />
 
-      {/* Additional links or text */}
       <View style={styles.additionalLinks}>
-        <TouchableOpacity
-          onPress={() => console.log("Forgot Password pressed")}
-        >
-          <Text style={styles.linkText}>Forgot Password?</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate("Registration")}>
-          <Text style={styles.linkText}>Register</Text>
+        <TouchableOpacity onPress={() => {navigation.navigate("Registration"), setError("")}}>
+          <Text style={styles.linkText}>Zarejestruj się</Text>
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity
         style={styles.continueButton}
-        onPress={() => console.log("Register pressed")}
+        onPress={() => setUserContext(1)}
       >
-        <Text style={styles.continueText}>Continue as Guest</Text>
+        <Text style={styles.continueText}>Kontynuuj jako gość</Text>
       </TouchableOpacity>
     </View>
   );
