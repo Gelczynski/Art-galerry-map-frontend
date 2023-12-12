@@ -1,13 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  Button,
-  Dimensions,
-  StyleSheet,
-  Image,
-  Platform,
-} from "react-native";
+import { View, Dimensions, StyleSheet, Image, Platform } from "react-native";
 import { useAuth } from "../store/AuthContext";
 import MapView, { Callout, Marker } from "react-native-maps";
 import { TouchableOpacity } from "react-native";
@@ -15,69 +7,20 @@ import { Modal } from "react-native";
 import Menu from "../components/Menu";
 import { FontAwesome } from "@expo/vector-icons";
 import GalleryDetails from "../components/GalleryDetails";
-
-// import { useAuth } from "./AuthContext";
-const markers = [
-  {
-    id: 1,
-    title: "galeria SIC! BWA Wrocław",
-    address: "pl. Tadeusza Kościuszki 9, 50-438 Wrocław",
-    openingHours: [
-      {
-        days: "pn-czw",
-        hours: "11:00-16:00",
-      },
-      {
-        days: "pt-ndz",
-        hours: "12:00-20:00",
-      },
-    ],
-    coordinate: { latitude: 51.102575, longitude: 17.028796 },
-    visited: true,
-  },
-  {
-    id: 2,
-    title: "Galeria Arttrakt",
-    address: "Ofiar Oświęcimskich 1/1, 50-069 Wrocław",
-
-    openingHours: [
-      {
-        days: "pn-czw",
-        hours: "12:00-18:00",
-      },
-      {
-        days: "pt-ndz",
-        hours: "14:00-18:00",
-      },
-    ],
-    coordinate: { latitude: 51.108734, longitude: 17.029987 },
-    visited: false,
-  },
-  {
-    id: 3,
-    title: "Galeria Versus",
-    address: "Jatki 11, 50-111 Wrocław",
-    openingHours: [
-      {
-        days: "pn-czw",
-        hours: "13:00-19:00",
-      },
-      {
-        days: "pt-ndz",
-        hours: "14:00-19:00",
-      },
-    ],
-    coordinate: { latitude: 51.112208, longitude: 17.0305 },
-    visited: false,
-  },
-  // Add more markers as needed
-];
+import Loader from "../components/Loader";
+import {
+  getAllGalleries,
+  getMyVisitedGalleries,
+  setGalleryAsVisited,
+} from "../utils/GalleryService";
 
 const HomeScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
   const [isMenuVisible, setMenuVisible] = useState(false);
   const [region, setRegion] = useState(initialRegion);
-  const [galleries, setGalleries] = useState(markers);
+  const [galleries, setGalleries] = useState([]);
+
+  const [loading, setLoading] = useState(true);
 
   const mapRef = useRef(null);
 
@@ -92,88 +35,105 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleListItemSelect = (marker) => {
-    // debugger;
-
-    // const mv = mapView.current;
-    // console.log(marker, mv);
-
-    // const newRegion = {
-    //   latitude: marker.coordinate.latitude,
-    //   longitude: marker.coordinate.longitude,
-    //   latitudeDelta,
-    //   longitudeDelta,
-    // };
-
-    // setRegion(newRegion);
-
+    console.log("MARK: ", JSON.stringify(marker));
     mapRef?.current?.animateCamera({
       center: {
-        latitude: marker.coordinate.latitude,
-        longitude: marker.coordinate.longitude,
+        latitude: marker.attributes.coordinate.latitude,
+        longitude: marker.attributes.coordinate.longitude,
       },
     });
     setMenuVisible(false);
   };
 
-  const handleSetAsVisited = (id) => {
-    console.log(id);
-    const updatedGalleries = [...galleries].map(
-      (gallery) => {
-        if (gallery.id === id) {
-          return {
-            ...gallery,
-            visited: true,
-          };
-        } else return gallery;
-      }
+  const handleSetAsVisited = (galleryId) => {
+    console.log(galleryId);
 
-      // gallery.id === id
-      //   ? {
-      //       visited: true,
-      //       ...gallery,
-      //     }
-      //   : gallery
-    );
-
-    console.log(updatedGalleries);
-    setGalleries(updatedGalleries);
+    setGalleryAsVisited(user.username, galleryId)
+      .then((res) => res.json())
+      .then((result) => {
+        console.log("GAL: ", JSON.stringify(result));
+        setMyGalleries();
+      });
   };
 
-  return (
+  useEffect(() => {
+    setLoading(true);
+    setMyGalleries();
+  }, []);
+
+  const setMyGalleries = () => {
+    getAllGalleries()
+      .then((resp) => resp.json())
+      .then((result) => {
+        const galleries = result?.data?.map((gal) => ({
+          ...gal,
+          visited: false,
+        }));
+        console.log(galleries);
+
+        console.log("USER", JSON.stringify(user));
+        if (user === 1) {
+          setGalleries(galleries);
+          setLoading(false);
+        } else if (user && user.username) {
+          getMyVisitedGalleries(user.username)
+            .then((resp) => resp.json())
+            .then((result) => {
+              const visitedIds = result.data.map((obj) =>
+                parseInt(obj.attributes.galleryId)
+              );
+
+              const updatedGalleries = galleries.map((gal) => {
+                // debugger;
+                if (visitedIds.includes(gal.id)) {
+                  return {
+                    ...gal,
+                    visited: true,
+                  };
+                } else {
+                  return gal;
+                }
+              });
+
+              setGalleries(updatedGalleries);
+              setLoading(false);
+
+              console.log("IPDATED", updatedGalleries);
+            });
+        }
+        // }
+      });
+  };
+
+  return loading ? (
+    <Loader isVisible={true} />
+  ) : (
     <View style={styles.container}>
       <MapView
         style={styles.map}
-        // initialRegion={initialRegion}
         region={region}
         ref={mapRef}
       >
-        {galleries?.map((marker) => (
-          // <Marker
-          //   key={marker.id}
-          //   coordinate={marker.coordinate}
-          //   title={marker.title}
-          //   description={marker.description}
-          // />
+        {galleries?.map(({ id, attributes, visited }) => (
           <Marker
-            key={marker.id}
-            coordinate={marker.coordinate}
-            title={marker.title}
-            description={marker.description}
+            key={id}
+            coordinate={attributes.coordinate}
+            title={attributes.title}
             pinColor="#f00"
-            // onPress={(e) => console.log(e.nativeEvent)}
-            // onSelect={(e) => console.log(e.nativeEvent)}
           >
             <Image
               source={
-                marker.visited
+                visited
                   ? require("../../assets/icons8-location-80-visited.png")
                   : require("../../assets/icons8-location-80.png")
               }
               style={{ height: 50, width: 50 }}
             />
             <GalleryDetails
-              gallery={marker}
-              key={marker.id}
+              id={id}
+              visited={visited}
+              gallery={attributes}
+              key={id}
               handleSetAsVisited={handleSetAsVisited}
             />
           </Marker>
@@ -184,7 +144,7 @@ const HomeScreen = ({ navigation }) => {
       </TouchableOpacity>
       <Modal visible={isMenuVisible} onBackdropPress={toggleMenu}>
         <Menu
-          markers={markers}
+          markers={galleries}
           onClose={toggleMenu}
           onItemSelect={handleListItemSelect}
         />
@@ -216,7 +176,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 16,
     right: 16,
-    backgroundColor: "#4285F4", // Google Blue color
+    backgroundColor: "#4285F4",
     borderRadius: 50,
     width: 60,
     height: 60,

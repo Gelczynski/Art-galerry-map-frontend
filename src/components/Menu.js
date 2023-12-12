@@ -1,4 +1,3 @@
-// MarkerMenu.js
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -17,9 +16,9 @@ const Menu = ({ markers, onClose, onItemSelect }) => {
   const [filteredMarkers, setFilteredMarkers] = useState(markers);
 
   useEffect(() => {
-    // Filter markers based on the search query
-    const filtered = markers.filter((marker) =>
-      marker.title.toLowerCase().includes(search.toLowerCase())
+    console.log("MARKERS: ", markers);
+    const filtered = markers.filter(({ attributes }) =>
+      attributes.title.toLowerCase().includes(search.toLowerCase())
     );
     setFilteredMarkers(filtered);
   }, [search, markers]);
@@ -27,7 +26,7 @@ const Menu = ({ markers, onClose, onItemSelect }) => {
   return (
     <View style={styles.container}>
       <SearchBar
-        placeholder="Search markers..."
+        placeholder="Wyszukaj..."
         onChangeText={(text) => setSearch(text)}
         value={search}
         containerStyle={styles.searchBarContainer}
@@ -45,19 +44,28 @@ const Menu = ({ markers, onClose, onItemSelect }) => {
             style={styles.markerItem}
             onPress={() => onItemSelect(item)}
           >
-            <Text>{item.title}</Text>
+            <Text>{item.attributes.title}</Text>
           </TouchableOpacity>
         )}
         style={styles.list}
       />
-      {/* <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-        <Text style={styles.closeButtonText}>Close</Text>
-      </TouchableOpacity> */}
 
-      {user ? (
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
+      {user && !user.username ? (
+        <View>
+          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+            <Text style={styles.logoutButtonText}>
+              Wróć do ekranu logowania
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {user && user.username ? (
+        <View>
+          <Text style={styles.userText}>Witaj {user.username}👋</Text>
+          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+            <Text style={styles.logoutButtonText}>Wyloguj się</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
     </View>
   );
@@ -73,7 +81,6 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     borderBottomColor: "transparent",
     borderTopColor: "transparent",
-    // marginBottom: 16,
     marginTop: 75,
   },
   searchBarInputContainer: {
@@ -81,6 +88,7 @@ const styles = StyleSheet.create({
   },
   searchBarInput: {
     backgroundColor: "#fff",
+    paddingLeft: 10,
   },
   markerItem: {
     paddingVertical: 10,
@@ -91,7 +99,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 50,
     right: 16,
-    backgroundColor: "#4285F4", // Google Blue color
+    backgroundColor: "#4285F4",
     borderRadius: 50,
     width: 40,
     height: 40,
@@ -105,7 +113,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginTop: 20,
-    backgroundColor: "#4285F4", // Google Blue color
+    backgroundColor: "#4285F4",
     paddingVertical: 10,
     borderRadius: 5,
     alignItems: "center",
@@ -113,6 +121,11 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     color: "#fff",
     fontSize: 16,
+  },
+  userText: {
+    color: "#4285F4",
+    fontSize: 20,
+    textAlign: "center",
   },
 });
 
