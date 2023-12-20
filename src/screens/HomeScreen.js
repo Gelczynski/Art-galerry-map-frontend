@@ -41,6 +41,8 @@ const HomeScreen = ({ navigation }) => {
         latitude: marker.attributes.coordinate.latitude,
         longitude: marker.attributes.coordinate.longitude,
       },
+      altitude: 1000,
+      zoom: 40,
     });
     setMenuVisible(false);
   };
@@ -120,6 +122,16 @@ const HomeScreen = ({ navigation }) => {
             coordinate={attributes.coordinate}
             title={attributes.title}
             pinColor="#f00"
+            onSelect={(e) => {
+              mapRef?.current?.animateCamera({
+                center: {
+                  latitude: attributes.coordinate.latitude,
+                  longitude: attributes.coordinate.longitude,
+                },
+                altitude: 1000,
+                zoom: 20,
+              });
+            }}
           >
             <Image
               source={
